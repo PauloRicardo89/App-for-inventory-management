@@ -43,7 +43,7 @@ class Estoque:
         ''', ('%' + query + '%',))
         return self.cursor.fetchall()
     
-    def registrar_saida(self, produto_id, quantidade_saida):
+    def registrar_saida(self, produto_id, quantidade_saida, event=None):
         self.cursor.execute('''
             UPDATE produtos SET quantidade = quantidade - ? WHERE id = ? AND quantidade - ? >= 0
         ''', (quantidade_saida, produto_id, quantidade_saida))
@@ -81,9 +81,13 @@ class DialogoAdicionarProduto(tk.Toplevel):
         self.quantidade = tk.StringVar()
         self.preco_venda = tk.StringVar()
         self.caminho_imagem = tk.StringVar()
+        self.entrada_nome_produto = tk.Entry(self, textvariable=self.nome)
+        self.entrada_nome_produto.grid(row=0, column=1)
+        self.bind('<Escape>', lambda event: self.destroy())
 
         tk.Label(self, text="Nome do produto:").grid(row=0, column=0)
-        tk.Entry(self, textvariable=self.nome).grid(row=0, column=1)
+        self.entrada_nome_produto = tk.Entry(self, textvariable=self.nome)
+        self.entrada_nome_produto.grid(row=0, column=1)
 
         tk.Label(self, text="Quantidade do produto:").grid(row=1, column=0)
         tk.Entry(self, textvariable=self.quantidade).grid(row=1, column=1)
@@ -94,24 +98,28 @@ class DialogoAdicionarProduto(tk.Toplevel):
         tk.Label(self, text="Caminho da imagem do produto:").grid(row=3, column=0)
         tk.Entry(self, textvariable=self.caminho_imagem).grid(row=3, column=1)
         tk.Button(self, text="Selecionar Imagem", command=self.selecionar_imagem).grid(row=3, column=2)
+        # Botão Salvar
+        botao_salvar = tk.Button(self, text="Salvar", command=self.salvar_produto)
+        botao_salvar.grid(row=4, column=1)
+        botao_salvar.bind('<Return>', self.salvar_produto)
+        botao_salvar.focus_set()
 
-        tk.Button(self, text="Salvar", command=self.salvar_produto).grid(row=4, column=1)
 
+       
     def selecionar_imagem(self):
         caminho_arquivo = filedialog.askopenfilename()
         if caminho_arquivo:
             self.caminho_imagem.set(caminho_arquivo)
 
-    def salvar_produto(self):
+    def salvar_produto(self, event=None):
         try:
-           # produto = Produto(
             nome=self.nome.get()
             quantidade=int(self.quantidade.get())
             preco_venda=float(self.preco_venda.get())
             caminho_imagem=self.caminho_imagem.get()
-            
+
+            # Adicionar ou atualizar o produto no estoque
             self.estoque.adicionar_ou_atualizar_produto(nome, quantidade, preco_venda, caminho_imagem)
-            #self.estoque.registrar_entrada(produto)
             messagebox.showinfo("Sucesso", "Produto adicionado com sucesso!")
             self.destroy()
         except ValueError as e:
@@ -147,12 +155,16 @@ class Aplicativo:
         # Adiciona botões ao frame lateral com tamanhos proporcionais à parte azul
         self.botao_adicionar = tk.Button(self.frame_lateral, text="Adicionar Produto", bg='green', fg='white', command=self.abrir_dialogo_adicionar)
         self.botao_adicionar.grid(row=0, column=0, sticky='ew', padx=30, pady=30, ipady=10)
+        self.botao_adicionar.bind('<Return>', lambda event: self.abrir_dialogo_adicionar())
 
         self.botao_pesquisar = tk.Button(self.frame_lateral, text="Pesquisar Produto", bg='white', fg='black', command=self.pesquisar_produto)
         self.botao_pesquisar.grid(row=1, column=0, sticky='ew', padx=30, pady=0, ipady=10)
+        self.botao_pesquisar.bind('<Return>', lambda event: self.pesquisar_produto())
+        
         # Adiciona o botão 'Registrar Saída' ao frame lateral
         self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', command=self.abrir_dialogo_registrar_saida)
         self.botao_registrar_saida.grid(row=2, column=0, sticky='ew', padx=30, pady=600, ipady=10)
+        self.botao_registrar_saida.bind('<Return>', lambda event: self.abrir_dialogo_registrar_saida())
                    
         # Configura os botões para expandirem e preencherem o espaço disponível
         self.frame_lateral.grid_rowconfigure(0, weight=0)
@@ -174,6 +186,8 @@ class Aplicativo:
     def mostrar_resultados(self, produtos):
         janela_resultados = tk.Toplevel(self.master)
         janela_resultados.title("Resultados da Pesquisa")
+        janela_resultados.bind('<Escape>', lambda event: janela_resultados.destroy())     
+        janela_resultados.focus_set()
         
         texto_resultados = scrolledtext.ScrolledText(janela_resultados, wrap=tk.WORD, font=('Arial', 12))
         texto_resultados.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
@@ -191,10 +205,14 @@ class DialogoRegistrarSaida(tk.Toplevel):
         super().__init__(parent)
         self.estoque = estoque
         self.title("Registrar Saída de Produto")
+        self.bind('<Escape>', lambda event: self.destroy())
+        self.geometry('600x400') # Define o tamanho da janela
 
         tk.Label(self, text="Nome do produto:").grid(row=0, column=0)
         self.entrada_nome_produto = tk.Entry(self)
         self.entrada_nome_produto.grid(row=0, column=1)
+        self.entrada_nome_produto.focus_set()
+        self.entrada_nome_produto.bind('<Return>', lambda event: self.buscar_produto())
         tk.Button(self, text="Buscar", command=self.buscar_produto).grid(row=0, column=2)
     
     def buscar_produto(self):
@@ -210,9 +228,14 @@ class DialogoRegistrarSaida(tk.Toplevel):
         # Cria uma nova janela para mostrar os produtos encontrados
         janela_selecao = tk.Toplevel(self)
         janela_selecao.title("Selecionar Produto")
+        janela_selecao.geometry('800x600')
+        janela_selecao.bind('<Escape>', lambda event: janela_selecao.destroy())
 
         lista_produtos = tk.Listbox(janela_selecao)
         lista_produtos.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        lista_produtos.bind('<Return>', lambda event: self.selecionar_produto(lista_produtos, janela_selecao))
+
+        lista_produtos.focus_set()
 
         for produto in produtos:
             lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
@@ -231,26 +254,42 @@ class DialogoRegistrarSaida(tk.Toplevel):
         # Cria uma janela de diálogo para inserir a quantidade de saída
         janela_quantidade = tk.Toplevel(janela_selecao)
         janela_quantidade.title("Quantidade de Saída")
+        janela_quantidade.geometry('300x200')
+        janela_quantidade.bind('<Return>', lambda event: self.confirmar_saida(produto_id, quantidade_saida_var.get(), janela_quantidade))
+        self.bind('<Escape>', lambda event: self.destroy())
 
         tk.Label(janela_quantidade, text="Quantidade de saída:").grid(row=0, column=0)
-        quantidade_saida_var = tk.IntVar()
-        tk.Entry(janela_quantidade, textvariable=quantidade_saida_var).grid(row=0, column=1)
-        tk.Button(janela_quantidade, text="Confirmar", command=lambda: self.confirmar_saida(produto_id, quantidade_saida_var.get(), janela_quantidade)).grid(row=1, column=0, columnspan=2)
+        quantidade_saida_var = tk.StringVar()
+        entrada_quantidade_saida = tk.Entry(janela_quantidade, textvariable=quantidade_saida_var)
+        entrada_quantidade_saida.grid(row=0, column=1)
+        entrada_quantidade_saida.focus_set() 
 
-    def confirmar_saida(self, produto_id, quantidade_saida_var, janela_saida):
-        quantidade_saida = quantidade_saida_var
-        print(f"Confirmando saída: Produto ID {produto_id}, Quantidade {quantidade_saida}")  # Para depuração
-        if quantidade_saida > 0:
-         try:
+        # Vincula a tecla Enter ao método confirmar_saida
+        entrada_quantidade_saida.bind('<Return>', lambda event: self.confirmar_saida(produto_id, quantidade_saida_var.get(), janela_quantidade))
+        tk.Button(janela_quantidade, text="Confirmar", command=lambda: self.confirmar_saida(produto_id, quantidade_saida_var.get(), janela_quantidade)).grid(row=1, column=0, columnspan=2)
+    
+    def confirmar_saida(self, produto_id, quantidade_saida_str, janela_saida, event=None):
+      try:
+        # Converte a string de quantidade para um inteiro
+        quantidade_saida = int(quantidade_saida_str)
+      except ValueError:
+        # Se a conversão falhar, mostra uma mensagem de erro e retorna
+        messagebox.showerror("Erro", "Por favor, insira um número válido.", parent=janela_saida)
+        return
+
+      print(f"Confirmando saída: Produto ID {produto_id}, Quantidade {quantidade_saida}")  # Para depuração
+
+      if quantidade_saida > 0:
+          try:
             self.estoque.registrar_saida(produto_id, quantidade_saida)
             messagebox.showinfo("Sucesso", "Saída de produto registrada com sucesso!", parent=janela_saida)
             janela_saida.destroy()
-         except ValueError as e:
+          except ValueError as e:
             messagebox.showerror("Erro", str(e), parent=janela_saida)
-         except Exception as e:
+          except Exception as e:
             messagebox.showerror("Erro", f"Um erro inesperado ocorreu: {e}", parent=janela_saida)
-        else:
-            messagebox.showerror("Erro", "A quantidade de saída deve ser maior que zero.", parent=janela_saida)
+      else:
+        messagebox.showerror("Erro", "A quantidade de saída deve ser maior que zero.", parent=janela_saida)
 
 if __name__ == "__main__":
     janela = tk.Tk()
