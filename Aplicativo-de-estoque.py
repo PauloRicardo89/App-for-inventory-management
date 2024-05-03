@@ -1,9 +1,13 @@
+import os
 import sqlite3
+import datetime
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog, scrolledtext
 
 # Conectar ao banco de dados SQLite
-conexao = sqlite3.connect('estoque_local.db')
+diretorio_atual = os.path.dirname(os.path.realpath(__file__))
+caminho_banco_de_dados = os.path.join(diretorio_atual, 'estoque_local.db')
+conexao = sqlite3.connect(caminho_banco_de_dados)
 cursor = conexao.cursor()
 
 # Criar a tabela de produtos, se ela não existir
@@ -14,6 +18,18 @@ CREATE TABLE IF NOT EXISTS produtos (
     quantidade INTEGER NOT NULL,
     preco_venda REAL NOT NULL,
     caminho_imagem TEXT
+)
+''')
+conexao.commit()
+# Criar a tabela de movimentações, se ela não existir
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS movimentacoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    produto_id INTEGER NOT NULL,
+    tipo TEXT NOT NULL,  -- 'entrada' ou 'saida'
+    quantidade INTEGER NOT NULL,
+    data_hora TEXT NOT NULL,
+    FOREIGN KEY (produto_id) REFERENCES produtos (id)
 )
 ''')
 conexao.commit()
@@ -30,11 +46,18 @@ class Estoque:
         self.conexao = conexao
         self.cursor = cursor
 
-    def registrar_entrada(self, produto):
+    def registrar_entrada(self, produto, quantidade):
         self.cursor.execute('''
             INSERT INTO produtos (nome, quantidade, preco_venda, caminho_imagem)
             VALUES (?, ?, ?, ?)
         ''', (produto.nome, produto.quantidade, produto.preco_venda, produto.caminho_imagem))
+        self.conexao.commit()
+        produto_id = self.cursor.lastrowid 
+        data_hora_atual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.cursor.execute('''
+            INSERT INTO movimentacoes (produto_id, tipo, quantidade, data_hora)
+            VALUES (?, 'entrada', ?, ?)
+        ''', (produto.id, quantidade, data_hora_atual))
         self.conexao.commit()
 
     def consultar_produto(self, query):
@@ -50,32 +73,53 @@ class Estoque:
         if self.cursor.rowcount == 0:
             raise ValueError("Não há quantidade suficiente no estoque para essa saída.")
         self.conexao.commit()
+        data_hora_atual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.cursor.execute('''
+            INSERT INTO movimentacoes (produto_id, tipo, quantidade, data_hora)
+            VALUES (?, 'saida', ?, ?)
+        ''', (produto_id, quantidade_saida, data_hora_atual))
+        self.conexao.commit()
 
     def adicionar_ou_atualizar_produto(self, nome_produto, quantidade_nova, preco_venda, caminho_imagem):
     # Verifica se o produto já existe no banco de dados
-        self.cursor.execute("SELECT quantidade FROM produtos WHERE nome = ?", (nome_produto,))
+        self.cursor.execute("SELECT id, quantidade FROM produtos WHERE nome = ?", (nome_produto,))
         resultado = self.cursor.fetchone()
     
         if resultado:
-        # Se o produto já existe, atualiza a quantidade
-           quantidade_atual = resultado[0]
-           nova_quantidade = quantidade_atual + quantidade_nova
-           self.cursor.execute("UPDATE produtos SET quantidade = ?, preco_venda = ?, caminho_imagem = ? WHERE nome = ?", (nova_quantidade, preco_venda, caminho_imagem, nome_produto))
+        # Se o produto já existe, atualiza a quantidade e registra a movimentação
+            produto_id, quantidade_atual = resultado
+            nova_quantidade = quantidade_atual + quantidade_nova
+            self.cursor.execute("UPDATE produtos SET quantidade = ?, preco_venda = ?, caminho_imagem = ? WHERE nome = ?", (nova_quantidade, preco_venda, caminho_imagem, nome_produto))
+            self.registrar_movimentacao(produto_id, 'entrada', quantidade_nova)
         else:
-        # Se o produto não existe, insere um novo registro
+        # Se o produto não existe, insere um novo registro e registra a movimentação
             self.cursor.execute("INSERT INTO produtos (nome, quantidade, preco_venda, caminho_imagem) VALUES (?, ?, ?, ?)", (nome_produto, quantidade_nova, preco_venda, caminho_imagem))
-            self.conexao.commit()
+            produto_id = self.cursor.lastrowid
+            self.registrar_movimentacao(produto_id, 'entrada', quantidade_nova)
+        self.conexao.commit()
 
     def buscar_produtos_por_nome(self, nome_produto):
         self.cursor.execute("SELECT id, nome, quantidade FROM produtos WHERE nome LIKE ?", ('%' + nome_produto + '%',))
         return self.cursor.fetchall()
-            
+    
+    def buscar_movimentacoes_recentes(self):
+        self.cursor.execute("SELECT * FROM movimentacoes ORDER BY data_hora DESC")
+        return self.cursor.fetchall()
+    
+    def registrar_movimentacao(self, produto_id, tipo, quantidade):
+        data_hora_atual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.cursor.execute('''
+            INSERT INTO movimentacoes (produto_id, tipo, quantidade, data_hora)
+            VALUES (?, ?, ?, ?)
+        ''', (produto_id, tipo, quantidade, data_hora_atual))
+        self.conexao.commit()
 
 class DialogoAdicionarProduto(tk.Toplevel):
-    def __init__(self, parent, estoque):
+    def __init__(self, parent, estoque, app_parent):
         super().__init__(parent)
         self.title("Adicionar Produto")
         self.estoque = estoque
+        self.parent = app_parent
 
         self.nome = tk.StringVar()
         self.quantidade = tk.StringVar()
@@ -122,6 +166,8 @@ class DialogoAdicionarProduto(tk.Toplevel):
             self.estoque.adicionar_ou_atualizar_produto(nome, quantidade, preco_venda, caminho_imagem)
             messagebox.showinfo("Sucesso", "Produto adicionado com sucesso!")
             self.destroy()
+            self.parent.atualizar_area_atualizacoes()
+            #self.parent.exibir_atualizacoes_estoque()
         except ValueError as e:
             messagebox.showerror("Erro", f"Ocorreu um erro ao adicionar o produto: {e}")
         except Exception as e:
@@ -148,6 +194,16 @@ class Aplicativo:
         self.frame_principal = tk.Frame(master, bg='lightgrey')
         self.frame_principal.grid(row=0, column=0, sticky='nsew')
 
+        # Botão para exibir/fechar atualizações do estoque
+        self.botao_atualizacoes = tk.Button(self.frame_principal, text="Exibir Atualizações do Estoque", bg='blue', fg='white', command=self.toggle_atualizacoes_estoque, highlightthickness=4, bd=4)
+        self.botao_atualizacoes.grid(row=0, column=0, sticky='ew', padx=10, pady=10)
+        self.botao_atualizacoes.bind('<Return>', lambda event: self.toggle_atualizacoes_estoque())
+        self.frame_principal.grid_rowconfigure(1, weight=1)
+        self.frame_principal.grid_columnconfigure(0, weight=1)
+        self.texto_atualizacoes = scrolledtext.ScrolledText(self.frame_principal, wrap=tk.WORD, font=('Arial', 16), state='disabled')
+        self.texto_atualizacoes.grid(row=1, column=0, sticky='nsew', padx=10, pady=10)
+        self.texto_atualizacoes.grid_remove()
+        
         # Cria um frame para a faixa lateral com cor azul escuro
         self.frame_lateral = tk.Frame(master, bg='darkblue')
         self.frame_lateral.grid(row=0, column=1, sticky='nsew')
@@ -172,7 +228,7 @@ class Aplicativo:
         self.frame_lateral.grid_columnconfigure(0, weight=1)
 
     def abrir_dialogo_adicionar(self):
-        DialogoAdicionarProduto(self.master, self.estoque)
+        DialogoAdicionarProduto(self.master, self.estoque, self)
 
     def pesquisar_produto(self):
         query = simpledialog.askstring("Pesquisar produto", "Nome do produto:")
@@ -198,12 +254,39 @@ class Aplicativo:
         texto_resultados.config(state=tk.DISABLED)  # Desativa a edição do texto
 
     def abrir_dialogo_registrar_saida(self):
-      DialogoRegistrarSaida(self.master, self.estoque)
+      DialogoRegistrarSaida(self.master, self.estoque, self)
+
+    def exibir_atualizacoes_estoque(self):
+        self.texto_atualizacoes.config(state='normal')
+        self.texto_atualizacoes.delete('1.0', tk.END) 
+        movimentacoes = self.estoque.buscar_movimentacoes_recentes()
+        for mov in movimentacoes:
+            self.texto_atualizacoes.insert(tk.END, f"Produto ID: {mov[1]}, Tipo: {mov[2]}, Quantidade: {mov[3]}, Data e Hora: {mov[4]}\n")
+            
+              # Desabilita a edição da área de texto após a atualização
+        self.texto_atualizacoes.config(state='disabled')
+        self.botao_atualizacoes.config(text="Fechar Atualizações do Estoque")  
+    
+    def atualizar_area_atualizacoes(self):
+        # Verifica se a área de atualizações está visível antes de atualizar
+        if self.texto_atualizacoes.winfo_ismapped():
+            self.exibir_atualizacoes_estoque()
+
+    def toggle_atualizacoes_estoque(self):
+        if self.texto_atualizacoes.winfo_ismapped():
+            self.texto_atualizacoes.grid_remove()
+            self.botao_atualizacoes.config(text="Exibir Atualizações do Estoque")
+        else:
+            self.texto_atualizacoes.grid()
+            self.botao_atualizacoes.config(text="Fechar Atualizações do Estoque")
+            # Aqui você pode adicionar o código para atualizar o texto com as últimas atualizações do estoque
+            self.exibir_atualizacoes_estoque()
 
 class DialogoRegistrarSaida(tk.Toplevel):
-    def __init__(self, parent, estoque):
+    def __init__(self, parent, estoque, app_parent):
         super().__init__(parent)
         self.estoque = estoque
+        self.parent = app_parent
         self.title("Registrar Saída de Produto")
         self.bind('<Escape>', lambda event: self.destroy())
         self.geometry('600x400') # Define o tamanho da janela
@@ -284,6 +367,7 @@ class DialogoRegistrarSaida(tk.Toplevel):
             self.estoque.registrar_saida(produto_id, quantidade_saida)
             messagebox.showinfo("Sucesso", "Saída de produto registrada com sucesso!", parent=janela_saida)
             janela_saida.destroy()
+            self.parent.atualizar_area_atualizacoes()
           except ValueError as e:
             messagebox.showerror("Erro", str(e), parent=janela_saida)
           except Exception as e:
