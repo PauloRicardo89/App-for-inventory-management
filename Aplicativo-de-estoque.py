@@ -114,6 +114,13 @@ class Estoque:
         ''', (produto_id, tipo, quantidade, data_hora_atual))
         self.conexao.commit()
 
+    def apagar_produto(self, produto_id):
+        # Primeiro, apaga as movimentações relacionadas ao produto
+        self.cursor.execute("DELETE FROM movimentacoes WHERE produto_id = ?", (produto_id,))
+        # Depois, apaga o produto
+        self.cursor.execute("DELETE FROM produtos WHERE id = ?", (produto_id,))
+        self.conexao.commit()    
+
 class DialogoAdicionarProduto(tk.Toplevel):
     def __init__(self, parent, estoque, app_parent):
         super().__init__(parent)
@@ -207,26 +214,39 @@ class Aplicativo:
         # Cria um frame para a faixa lateral com cor azul escuro
         self.frame_lateral = tk.Frame(master, bg='darkblue')
         self.frame_lateral.grid(row=0, column=1, sticky='nsew')
-
-        # Adiciona botões ao frame lateral com tamanhos proporcionais à parte azul
-        self.botao_adicionar = tk.Button(self.frame_lateral, text="Adicionar Produto", bg='green', fg='white', command=self.abrir_dialogo_adicionar)
-        self.botao_adicionar.grid(row=0, column=0, sticky='ew', padx=30, pady=30, ipady=10)
-        self.botao_adicionar.bind('<Return>', lambda event: self.abrir_dialogo_adicionar())
-
-        self.botao_pesquisar = tk.Button(self.frame_lateral, text="Pesquisar Produto", bg='white', fg='black', command=self.pesquisar_produto)
-        self.botao_pesquisar.grid(row=1, column=0, sticky='ew', padx=30, pady=0, ipady=10)
-        self.botao_pesquisar.bind('<Return>', lambda event: self.pesquisar_produto())
         
-        # Adiciona o botão 'Registrar Saída' ao frame lateral
-        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', command=self.abrir_dialogo_registrar_saida)
-        self.botao_registrar_saida.grid(row=2, column=0, sticky='ew', padx=30, pady=600, ipady=10)
-        self.botao_registrar_saida.bind('<Return>', lambda event: self.abrir_dialogo_registrar_saida())
-                   
+        # Cria um frame para a faixa lateral com cor azul escuro
+        self.frame_lateral = tk.Frame(master, bg='darkblue')
+        self.frame_lateral.grid(row=0, column=1, sticky='nsew')
+
         # Configura os botões para expandirem e preencherem o espaço disponível
         self.frame_lateral.grid_rowconfigure(0, weight=0)
         self.frame_lateral.grid_rowconfigure(1, weight=0)
+        self.frame_lateral.grid_rowconfigure(2, weight=0)
+        self.frame_lateral.grid_rowconfigure(3, weight=0) 
         self.frame_lateral.grid_columnconfigure(0, weight=1)
 
+        # botão para adicionar Produto
+        self.botao_adicionar = tk.Button(self.frame_lateral, text="Adicionar Produto", bg='green', fg='white', command=self.abrir_dialogo_adicionar)
+        self.botao_adicionar.grid(row=0, column=0, sticky='ew', padx=30, pady=20, ipady=10)
+        self.botao_adicionar.bind('<Return>', lambda event: self.abrir_dialogo_adicionar())
+
+        # botão para Pesquisar produto
+        self.botao_pesquisar = tk.Button(self.frame_lateral, text="Pesquisar Produto", bg='white', fg='black', command=self.pesquisar_produto)
+        self.botao_pesquisar.grid(row=1, column=0, sticky='ew', padx=30, pady=0, ipady=10)
+        self.botao_pesquisar.bind('<Return>', lambda event: self.pesquisar_produto())
+
+        # Botão Apagar Produto
+        self.botao_apagar = tk.Button(self.frame_lateral, text="Apagar Produto", bg='orange', fg='white', command=self.abrir_dialogo_apagar)
+        self.botao_apagar.grid(row=2, column=0, sticky='ew', padx=30, pady=(250, 30), ipady=10, ipadx=10)
+        self.botao_apagar.bind('<Return>', lambda event: self.abrir_dialogo_apagar())
+
+       # Adiciona o botão 'Registrar Saída' ao frame lateral
+        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', command=self.abrir_dialogo_registrar_saida)
+        self.botao_registrar_saida.grid(row=3, column=0, sticky='ew', padx=30, pady=300, ipady=10)
+        self.botao_registrar_saida.bind('<Return>', lambda event: self.abrir_dialogo_registrar_saida())
+
+        
     def abrir_dialogo_adicionar(self):
         DialogoAdicionarProduto(self.master, self.estoque, self)
 
@@ -263,7 +283,7 @@ class Aplicativo:
         for mov in movimentacoes:
             self.texto_atualizacoes.insert(tk.END, f"Produto ID: {mov[1]}, Tipo: {mov[2]}, Quantidade: {mov[3]}, Data e Hora: {mov[4]}\n")
             
-              # Desabilita a edição da área de texto após a atualização
+        # Desabilita a edição da área de texto após a atualização
         self.texto_atualizacoes.config(state='disabled')
         self.botao_atualizacoes.config(text="Fechar Atualizações do Estoque")  
     
@@ -279,8 +299,100 @@ class Aplicativo:
         else:
             self.texto_atualizacoes.grid()
             self.botao_atualizacoes.config(text="Fechar Atualizações do Estoque")
-            # Aqui você pode adicionar o código para atualizar o texto com as últimas atualizações do estoque
+            # código que atualizar o texto com as últimas atualizações do estoque
             self.exibir_atualizacoes_estoque()
+    
+    def mostrar_janela_selecao_para_apagar(self, produtos, nome_produto):
+        janela_selecao = tk.Toplevel(self.master)
+        janela_selecao.title("Selecionar Produto para Apagar")
+        janela_selecao.geometry('800x600')
+
+        janela_selecao.grid_rowconfigure(0, weight=1)
+        janela_selecao.grid_columnconfigure(0, weight=1)
+
+        self.lista_produtos = tk.Listbox(janela_selecao)
+        self.lista_produtos.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        self.lista_produtos = tk.Listbox(janela_selecao)
+        self.lista_produtos.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+
+        for produto in produtos:
+            self.lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
+           
+        # Botão Selecionar
+        botao_selecionar = tk.Button(janela_selecao, text="Selecionar", command=lambda: self.confirmar_e_apagar_produto(self.lista_produtos, janela_selecao, nome_produto))
+        botao_selecionar.grid(row=1, column=0, pady=5)
+        
+        self.lista_produtos.bind('<Return>', lambda event: self.confirmar_e_apagar_produto(self.lista_produtos, janela_selecao, nome_produto))
+        janela_selecao.bind('<Escape>', lambda event: janela_selecao.destroy())
+        self.lista_produtos.focus_set()
+
+    def abrir_dialogo_apagar(self):
+        nome_produto = simpledialog.askstring("Apagar Produto", "Digite o nome do produto a ser apagado:")
+        if nome_produto:
+            produtos_encontrados = self.estoque.buscar_produtos_por_nome(nome_produto)
+        if produtos_encontrados:
+            self.mostrar_janela_selecao_para_apagar(produtos_encontrados, nome_produto)
+        else:
+            messagebox.showinfo("Informação", "Nenhum produto encontrado com esse nome.")
+    
+    def exibir_lista_produtos(self, nome_produto):
+        produtos_encontrados = self.estoque.buscar_produtos_por_nome(nome_produto)
+        if produtos_encontrados:
+            #self.mostrar_janela_selecao(produtos_encontrados, nome_produto)
+            self.lista_produtos.delete(0, tk.END)
+            # Insere os produtos atualizados na lista
+            for produto in produtos_encontrados:
+                self.lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
+        else:
+            messagebox.showinfo("Informação", "Nenhum produto encontrado com esse nome.")
+
+    def mostrar_janela_selecao(self, produtos, nome_produto):
+        janela_selecao = tk.Toplevel(self.master)
+        janela_selecao.title("Selecionar Produto para Apagar")
+        janela_selecao.geometry('800x600')
+
+    # Configura o gerenciador de layout grid para a nova janela
+        janela_selecao.grid_rowconfigure(0, weight=1)
+        janela_selecao.grid_columnconfigure(0, weight=1)
+
+        lista_produtos = tk.Listbox(janela_selecao)
+        lista_produtos.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+
+        for produto in produtos:
+            lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
+        
+        #botao_apagar = tk.Button(janela_selecao, text="Apagar Produto", command=lambda: self.confirmar_e_apagar_produto(lista_produtos, janela_selecao, nome_produto))
+        #botao_apagar.grid(row=1, column=0, padx=10, pady=10)
+        
+        # Vincula a tecla Enter à função de confirmação de apagar produto
+        lista_produtos.bind('<Return>', lambda event: self.confirmar_e_apagar_produto(lista_produtos, janela_selecao, nome_produto))
+
+    # Permite a navegação pela lista usando as setas do teclado
+        lista_produtos.bind('<Up>', lambda event: "break")  # Impede o comportamento padrão de rolagem
+        lista_produtos.bind('<Down>', lambda event: "break")  # Impede o comportamento padrão de rolagem
+
+    # Adiciona uma barra de rolagem
+        scrollbar = tk.Scrollbar(janela_selecao, orient='vertical', command=lista_produtos.yview)
+        scrollbar.grid(row=0, column=1, sticky='ns')
+        lista_produtos['yscrollcommand'] = scrollbar.set
+        lista_produtos.focus_set()
+
+    def confirmar_e_apagar_produto(self, lista_produtos, janela_selecao, nome_produto, event=None):
+        selecionado = lista_produtos.curselection()
+        if selecionado:
+            produto_id = lista_produtos.get(selecionado).split(" - ")[0].replace("ID: ", "")
+            confirmacao = messagebox.askyesno("Confirmar", "Tem certeza que deseja apagar o produto selecionado?", parent=janela_selecao)
+            if confirmacao:
+                self.estoque.apagar_produto(produto_id)
+                messagebox.showinfo("Sucesso", "Produto apagado com sucesso!", parent=janela_selecao)
+                self.exibir_lista_produtos(nome_produto)
+                #janela_selecao.destroy()
+                self.exibir_atualizacoes_estoque()  
+        else:
+            #if not confirmacao:
+            messagebox.showinfo("Informação", "Por favor, selecione um produto para apagar.", parent=janela_selecao)
+            janela_selecao.update_idletasks()
+            janela_selecao.destroy()   
 
 class DialogoRegistrarSaida(tk.Toplevel):
     def __init__(self, parent, estoque, app_parent):
