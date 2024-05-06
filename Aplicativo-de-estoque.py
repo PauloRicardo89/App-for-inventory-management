@@ -2,7 +2,7 @@ import os
 import sqlite3
 import datetime
 import tkinter as tk
-from tkinter import messagebox, simpledialog, filedialog, scrolledtext
+from tkinter import messagebox, simpledialog, filedialog, scrolledtext, font
 
 # Conectar ao banco de dados SQLite
 diretorio_atual = os.path.dirname(os.path.realpath(__file__))
@@ -102,6 +102,11 @@ class Estoque:
         self.cursor.execute("SELECT id, nome, quantidade FROM produtos WHERE nome LIKE ?", ('%' + nome_produto + '%',))
         return self.cursor.fetchall()
     
+    def buscar_nome_produto_por_id(self, produto_id):
+        self.cursor.execute("SELECT nome FROM produtos WHERE id = ?", (produto_id,))
+        resultado = self.cursor.fetchone()
+        return resultado[0] if resultado else "Nome não encontrado"
+    
     def buscar_movimentacoes_recentes(self):
         self.cursor.execute("SELECT * FROM movimentacoes ORDER BY data_hora DESC")
         return self.cursor.fetchall()
@@ -154,8 +159,6 @@ class DialogoAdicionarProduto(tk.Toplevel):
         botao_salvar.grid(row=4, column=1)
         botao_salvar.bind('<Return>', self.salvar_produto)
         botao_salvar.focus_set()
-
-
        
     def selecionar_imagem(self):
         caminho_arquivo = filedialog.askopenfilename()
@@ -180,7 +183,6 @@ class DialogoAdicionarProduto(tk.Toplevel):
         except Exception as e:
             messagebox.showerror("Erro", f"Um erro inesperado ocorreu: {e}")
 
-
 class Aplicativo:
     def __init__(self, master):
         self.master = master
@@ -200,9 +202,12 @@ class Aplicativo:
         # Cria um frame para o conteúdo principal com cor cinza claro
         self.frame_principal = tk.Frame(master, bg='lightgrey')
         self.frame_principal.grid(row=0, column=0, sticky='nsew')
+        
+        # fonte para os botões
+        fonte_botao = font.Font(family='Helvetica', size=12, weight='bold')
 
         # Botão para exibir/fechar atualizações do estoque
-        self.botao_atualizacoes = tk.Button(self.frame_principal, text="Exibir Atualizações do Estoque", bg='blue', fg='white', command=self.toggle_atualizacoes_estoque, highlightthickness=4, bd=4)
+        self.botao_atualizacoes = tk.Button(self.frame_principal, text="Exibir Atualizações do Estoque", bg='blue', fg='white', font=fonte_botao, command=self.toggle_atualizacoes_estoque, highlightthickness=4, bd=4)
         self.botao_atualizacoes.grid(row=0, column=0, sticky='ew', padx=10, pady=10)
         self.botao_atualizacoes.bind('<Return>', lambda event: self.toggle_atualizacoes_estoque())
         self.frame_principal.grid_rowconfigure(1, weight=1)
@@ -227,26 +232,25 @@ class Aplicativo:
         self.frame_lateral.grid_columnconfigure(0, weight=1)
 
         # botão para adicionar Produto
-        self.botao_adicionar = tk.Button(self.frame_lateral, text="Adicionar Produto", bg='green', fg='white', command=self.abrir_dialogo_adicionar)
+        self.botao_adicionar = tk.Button(self.frame_lateral, text="Adicionar Produto", bg='green', fg='white',font=fonte_botao, command=self.abrir_dialogo_adicionar)
         self.botao_adicionar.grid(row=0, column=0, sticky='ew', padx=30, pady=20, ipady=10)
         self.botao_adicionar.bind('<Return>', lambda event: self.abrir_dialogo_adicionar())
 
         # botão para Pesquisar produto
-        self.botao_pesquisar = tk.Button(self.frame_lateral, text="Pesquisar Produto", bg='white', fg='black', command=self.pesquisar_produto)
+        self.botao_pesquisar = tk.Button(self.frame_lateral, text="Pesquisar Produto", bg='white', fg='black', font=fonte_botao, command=self.pesquisar_produto)
         self.botao_pesquisar.grid(row=1, column=0, sticky='ew', padx=30, pady=0, ipady=10)
         self.botao_pesquisar.bind('<Return>', lambda event: self.pesquisar_produto())
 
         # Botão Apagar Produto
-        self.botao_apagar = tk.Button(self.frame_lateral, text="Apagar Produto", bg='orange', fg='white', command=self.abrir_dialogo_apagar)
-        self.botao_apagar.grid(row=2, column=0, sticky='ew', padx=30, pady=(250, 30), ipady=10, ipadx=10)
+        self.botao_apagar = tk.Button(self.frame_lateral, text="Apagar Produto", bg='orange', fg='white', font=fonte_botao, command=self.abrir_dialogo_apagar)
+        self.botao_apagar.grid(row=2, column=0, sticky='ew', padx=30, pady=(260, 30), ipady=10, ipadx=10)
         self.botao_apagar.bind('<Return>', lambda event: self.abrir_dialogo_apagar())
 
        # Adiciona o botão 'Registrar Saída' ao frame lateral
-        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', command=self.abrir_dialogo_registrar_saida)
-        self.botao_registrar_saida.grid(row=3, column=0, sticky='ew', padx=30, pady=300, ipady=10)
+        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', font=fonte_botao, command=self.abrir_dialogo_registrar_saida)
+        self.botao_registrar_saida.grid(row=3, column=0, sticky='ew', padx=30, pady=260, ipady=10)
         self.botao_registrar_saida.bind('<Return>', lambda event: self.abrir_dialogo_registrar_saida())
-
-        
+     
     def abrir_dialogo_adicionar(self):
         DialogoAdicionarProduto(self.master, self.estoque, self)
 
@@ -265,7 +269,7 @@ class Aplicativo:
         janela_resultados.bind('<Escape>', lambda event: janela_resultados.destroy())     
         janela_resultados.focus_set()
         
-        texto_resultados = scrolledtext.ScrolledText(janela_resultados, wrap=tk.WORD, font=('Arial', 12))
+        texto_resultados = scrolledtext.ScrolledText(janela_resultados, wrap=tk.WORD, font=('Arial', 16))
         texto_resultados.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
         
         for id, nome, quantidade, preco_venda, caminho_imagem in produtos:
@@ -278,11 +282,19 @@ class Aplicativo:
 
     def exibir_atualizacoes_estoque(self):
         self.texto_atualizacoes.config(state='normal')
-        self.texto_atualizacoes.delete('1.0', tk.END) 
+        self.texto_atualizacoes.delete('1.0', tk.END)
+        # Define as tags para as cores
+        self.texto_atualizacoes.tag_config('saida', foreground='red')
+        self.texto_atualizacoes.tag_config('entrada', foreground='green') 
+        
         movimentacoes = self.estoque.buscar_movimentacoes_recentes()
         for mov in movimentacoes:
-            self.texto_atualizacoes.insert(tk.END, f"Produto ID: {mov[1]}, Tipo: {mov[2]}, Quantidade: {mov[3]}, Data e Hora: {mov[4]}\n")
-            
+            nome_produto = self.estoque.buscar_nome_produto_por_id(mov[1])
+            tipo_movimentacao = "Saída" if mov[2].lower() == "saida" else "Entrada"
+            data_hora_formatada = datetime.datetime.strptime(mov[4], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y : %H:%M')
+            self.texto_atualizacoes.insert(tk.END, f"{tipo_movimentacao}, ", 'saida' if tipo_movimentacao == "Saída" else 'entrada')
+            self.texto_atualizacoes.insert(tk.END, f"Nome: {nome_produto}, ID: {mov[1]}, Quantidade: {mov[3]}, Data e Hora: {data_hora_formatada}\n")
+        
         # Desabilita a edição da área de texto após a atualização
         self.texto_atualizacoes.config(state='disabled')
         self.botao_atualizacoes.config(text="Fechar Atualizações do Estoque")  
@@ -306,15 +318,14 @@ class Aplicativo:
         janela_selecao = tk.Toplevel(self.master)
         janela_selecao.title("Selecionar Produto para Apagar")
         janela_selecao.geometry('800x600')
+        minha_fonte = font.Font(family='Helvetica', size=16, weight='bold')
 
         janela_selecao.grid_rowconfigure(0, weight=1)
         janela_selecao.grid_columnconfigure(0, weight=1)
 
-        self.lista_produtos = tk.Listbox(janela_selecao)
+        self.lista_produtos = tk.Listbox(janela_selecao, font=minha_fonte)
         self.lista_produtos.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
-        self.lista_produtos = tk.Listbox(janela_selecao)
-        self.lista_produtos.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
-
+        
         for produto in produtos:
             self.lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
            
@@ -328,6 +339,9 @@ class Aplicativo:
 
     def abrir_dialogo_apagar(self):
         nome_produto = simpledialog.askstring("Apagar Produto", "Digite o nome do produto a ser apagado:")
+        if nome_produto is None:
+            return
+        produtos_encontrados = []
         if nome_produto:
             produtos_encontrados = self.estoque.buscar_produtos_por_nome(nome_produto)
         if produtos_encontrados:
@@ -338,7 +352,6 @@ class Aplicativo:
     def exibir_lista_produtos(self, nome_produto):
         produtos_encontrados = self.estoque.buscar_produtos_por_nome(nome_produto)
         if produtos_encontrados:
-            #self.mostrar_janela_selecao(produtos_encontrados, nome_produto)
             self.lista_produtos.delete(0, tk.END)
             # Insere os produtos atualizados na lista
             for produto in produtos_encontrados:
@@ -361,15 +374,12 @@ class Aplicativo:
         for produto in produtos:
             lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
         
-        #botao_apagar = tk.Button(janela_selecao, text="Apagar Produto", command=lambda: self.confirmar_e_apagar_produto(lista_produtos, janela_selecao, nome_produto))
-        #botao_apagar.grid(row=1, column=0, padx=10, pady=10)
-        
         # Vincula a tecla Enter à função de confirmação de apagar produto
         lista_produtos.bind('<Return>', lambda event: self.confirmar_e_apagar_produto(lista_produtos, janela_selecao, nome_produto))
 
     # Permite a navegação pela lista usando as setas do teclado
-        lista_produtos.bind('<Up>', lambda event: "break")  # Impede o comportamento padrão de rolagem
-        lista_produtos.bind('<Down>', lambda event: "break")  # Impede o comportamento padrão de rolagem
+        lista_produtos.bind('<Up>', lambda event: "break")  
+        lista_produtos.bind('<Down>', lambda event: "break") 
 
     # Adiciona uma barra de rolagem
         scrollbar = tk.Scrollbar(janela_selecao, orient='vertical', command=lista_produtos.yview)
@@ -386,10 +396,8 @@ class Aplicativo:
                 self.estoque.apagar_produto(produto_id)
                 messagebox.showinfo("Sucesso", "Produto apagado com sucesso!", parent=janela_selecao)
                 self.exibir_lista_produtos(nome_produto)
-                #janela_selecao.destroy()
                 self.exibir_atualizacoes_estoque()  
         else:
-            #if not confirmacao:
             messagebox.showinfo("Informação", "Por favor, selecione um produto para apagar.", parent=janela_selecao)
             janela_selecao.update_idletasks()
             janela_selecao.destroy()   
@@ -424,12 +432,12 @@ class DialogoRegistrarSaida(tk.Toplevel):
         janela_selecao = tk.Toplevel(self)
         janela_selecao.title("Selecionar Produto")
         janela_selecao.geometry('800x600')
+        minha_fonte = font.Font(family='Helvetica', size=16, weight='bold')
         janela_selecao.bind('<Escape>', lambda event: janela_selecao.destroy())
 
-        lista_produtos = tk.Listbox(janela_selecao)
+        lista_produtos = tk.Listbox(janela_selecao, font=minha_fonte)
         lista_produtos.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
         lista_produtos.bind('<Return>', lambda event: self.selecionar_produto(lista_produtos, janela_selecao))
-
         lista_produtos.focus_set()
 
         for produto in produtos:
