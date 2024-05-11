@@ -51,6 +51,17 @@ def centralizar_janela(janela):
     y = (janela.winfo_screenheight() // 2) - (altura // 2)
     janela.geometry(f'+{x}+{y}')
 
+def formatar_preco_para_float(valor):
+        # Remove pontos dos milhares
+        valor_sem_pontos = valor.replace('.', '')
+        # Substitui vírgula por ponto para a conversão em float
+        valor_formatado = valor_sem_pontos.replace(',', '.')
+        return float(valor_formatado)
+
+def formatar_valor_para_exibicao(valor):
+    # Formata o valor para incluir dois decimais, vírgula para decimais e ponto para milhares
+    return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')    
+
 class Produto:
     def __init__(self, nome, quantidade, preco_venda, caminho_imagem):
         self.nome = nome
@@ -220,31 +231,46 @@ class DialogoAdicionarProduto(tk.Toplevel):
         try:
             nome=self.nome.get()
             quantidade=int(self.quantidade.get())
-            preco_venda=float(self.preco_venda.get())
+            preco_venda = formatar_preco_para_float(self.preco_venda.get())
             caminho_imagem=self.caminho_imagem.get()
 
             # Adicionar ou atualizar o produto no estoque
             self.estoque.adicionar_ou_atualizar_produto(nome, quantidade, preco_venda, caminho_imagem)
             messagebox.showinfo("Sucesso", "Produto adicionado com sucesso!")
-            self.destroy()
+            
+            # Limpa os campos para nova entrada
+            self.limpar_campos()
             self.parent.atualizar_area_atualizacoes()
-            #self.parent.exibir_atualizacoes_estoque()
         except ValueError as e:
             messagebox.showerror("Erro", f"Ocorreu um erro ao adicionar o produto: {e}")
         except Exception as e:
             messagebox.showerror("Erro", f"Um erro inesperado ocorreu: {e}")
 
+    def limpar_campos(self):
+        # Limpa os campos de entrada
+        self.nome.set('')
+        self.quantidade.set('')
+        self.preco_venda.set('')
+        self.caminho_imagem.set('')
+        self.entrada_nome_produto.focus_set()
+    
 class Aplicativo:
     def __init__(self, master):
         self.master = master
         self.master.title("Aplicativo de Estoque")
         self.estoque = Estoque()
 
-        # Configura o tamanho da janela
-        largura_janela = self.master.winfo_screenwidth()
-        altura_janela = self.master.winfo_screenheight()
-        self.master.geometry(f"{largura_janela}x{altura_janela}+0+0")
-
+        # Maximiza a janela ao abrir
+        self.master.state('zoomed')
+        # Obtém a largura e altura da tela do usuário
+        largura_tela = self.master.winfo_screenwidth()
+        altura_tela = self.master.winfo_screenheight()
+       
+        # Define o tamanho mínimo da janela com base na resolução da tela
+        largura_minima = min(800, largura_tela)
+        altura_minima = min(600, altura_tela)
+        self.master.minsize(largura_minima, altura_minima)
+        
         # Configura o gerenciador de layout grid para a janela principal
         self.master.grid_rowconfigure(0, weight=1)
         self.master.grid_columnconfigure(0, weight=7, uniform="grupo")  # 70% para o conteúdo principal
@@ -271,10 +297,6 @@ class Aplicativo:
         self.frame_lateral = tk.Frame(master, bg='darkblue')
         self.frame_lateral.grid(row=0, column=1, sticky='nsew')
         
-        # Cria um frame para a faixa lateral com cor azul escuro
-        self.frame_lateral = tk.Frame(master, bg='darkblue')
-        self.frame_lateral.grid(row=0, column=1, sticky='nsew')
-
         # Configura os botões para expandirem e preencherem o espaço disponível
         self.frame_lateral.grid_rowconfigure(0, weight=0)
         self.frame_lateral.grid_rowconfigure(1, weight=0)
@@ -290,12 +312,12 @@ class Aplicativo:
 
         # botão para Pesquisar produto
         self.botao_pesquisar = tk.Button(self.frame_lateral, text="Pesquisar Produto", bg='#f0f0f0', fg='black', font=fonte_botao, command=self.pesquisar_produto)
-        self.botao_pesquisar.grid(row=1, column=0, sticky='ew', padx=30, pady=0, ipady=10)
+        self.botao_pesquisar.grid(row=1, column=0, sticky='ew', padx=30, pady=10, ipady=10)
         self.botao_pesquisar.bind('<Return>', lambda event: self.pesquisar_produto())
         
         # Botão para configurar alerta de estoque baixo
-        self.botao_configurar_alerta = tk.Button(self.frame_lateral, text="Configurar Alerta de Estoque Baixo", bg='yellow', fg='black', font=fonte_botao, command=self.configurar_alerta_estoque)
-        self.botao_configurar_alerta.grid(row=2, column=0, sticky='ew', padx=30, pady= (200,30), ipady=10)
+        self.botao_configurar_alerta = tk.Button(self.frame_lateral, text="Alerta de Estoque Baixo", bg='yellow', fg='black', font=fonte_botao, command=self.configurar_alerta_estoque)
+        self.botao_configurar_alerta.grid(row=2, column=0, sticky='ew', padx=30, pady= (120,30), ipady=10)
         self.botao_configurar_alerta.bind('<Return>', lambda event: self.configurar_alerta_estoque())
 
         # Botão Apagar Produto
@@ -304,8 +326,8 @@ class Aplicativo:
         self.botao_apagar.bind('<Return>', lambda event: self.abrir_dialogo_apagar())
 
        # Adiciona o botão 'Registrar Saída' ao frame lateral
-        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', font=fonte_botao, command=self.abrir_dialogo_registrar_saida)
-        self.botao_registrar_saida.grid(row=4, column=0, sticky='ew', padx=30, pady=260, ipady=10)
+        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', font=fonte_botao, command=self.abrir_dialogo_registrar_saida,highlightthickness=5, bd=5)
+        self.botao_registrar_saida.grid(row=4, column=0, sticky='ew', padx=30, pady=(120,30), ipady=12)
         self.botao_registrar_saida.bind('<Return>', lambda event: self.abrir_dialogo_registrar_saida())
      
     def abrir_dialogo_adicionar(self):
@@ -343,16 +365,28 @@ class Aplicativo:
         botao_salvar.grid(row=2, column=0, columnspan=2, pady=10)
         botao_salvar.bind('<Return>', lambda event: self.salvar_limite_alerta(spinbox_valor.get(), janela_alerta))
 
-
     def pesquisar_produto(self):
-        query = simpledialog.askstring("Pesquisar produto", "Nome do produto:")
+        query = simpledialog.askstring("Pesquisar produto", "Digite o nome ou ID do produto:")
         if query is not None and query.strip():
-            produtos = self.estoque.consultar_produto(query)
-            if produtos:
-                self.mostrar_resultados(produtos)
+        # Verifica se a consulta é um número (ID)
+            if query.isdigit():
+                produto_id = int(query)
+                produto = self.estoque.buscar_nome_produto_por_id(produto_id)
+                if produto != "Nome não encontrado":
+                    produtos = self.estoque.consultar_produto(produto)
+                    self.mostrar_resultados(produtos)
+                else:
+                    messagebox.showinfo("Pesquisar produto", "Nenhum produto encontrado para a pesquisa.")
             else:
-                messagebox.showinfo("Pesquisar produto", "Nenhum produto encontrado para a pesquisa.")
-
+                 # Assume que a consulta é um nome
+                produtos = self.estoque.consultar_produto(query)
+                if produtos:
+                    self.mostrar_resultados(produtos)
+                else:
+                    messagebox.showinfo("Pesquisar produto", "Nenhum produto encontrado para a pesquisa.")
+        elif query is None:
+            pass  # Não faz nada se a caixa de diálogo for fechada sem entrada
+    
     def mostrar_resultados(self, produtos):
         janela_resultados = tk.Toplevel(self.master)
         janela_resultados.title("Resultados da Pesquisa")
@@ -363,7 +397,8 @@ class Aplicativo:
         texto_resultados.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
         
         for id, nome, quantidade, preco_venda, caminho_imagem in produtos:
-            texto_resultados.insert(tk.END, f"ID: {id}\nNome: {nome}\nQuantidade: {quantidade}\nPreço de Venda: {preco_venda}\nImagem: {caminho_imagem}\n\n")
+            preco_formatado = formatar_valor_para_exibicao(preco_venda)
+            texto_resultados.insert(tk.END, f"ID: {id}\nNome: {nome}\nQuantidade: {quantidade}\nPreço de Venda: {preco_formatado}\nImagem: {caminho_imagem}\n\n")
         
         texto_resultados.config(state=tk.DISABLED)  # Desativa a edição do texto
 
@@ -401,7 +436,7 @@ class Aplicativo:
             data_hora_formatada = datetime.datetime.strptime(mov[4], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y : %H:%M')
             quantidade_atual = self.estoque.buscar_quantidade_atual_por_id(mov[1])
             self.texto_atualizacoes.insert(tk.END, f"{tipo_movimentacao}, ", 'saida' if tipo_movimentacao == "Saída" else 'entrada')
-            self.texto_atualizacoes.insert(tk.END, f"Nome: {nome_produto}, ID: {mov[1]}, Quantidade: {mov[3]}, Data e Hora: {data_hora_formatada}\n")
+            self.texto_atualizacoes.insert(tk.END, f"ID: {mov[1]},Nome: {nome_produto}, Quantidade: {mov[3]}, Data e Hora: {data_hora_formatada}\n")
         
         # Desabilita a edição da área de texto após a atualização
         self.texto_atualizacoes.config(state='disabled')
@@ -608,4 +643,3 @@ if __name__ == "__main__":
     janela = tk.Tk()
     app = Aplicativo(janela)
     janela.mainloop()
-    
