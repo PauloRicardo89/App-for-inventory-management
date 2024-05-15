@@ -2,7 +2,7 @@ import os
 import sqlite3
 import datetime
 import tkinter as tk
-from tkinter import messagebox, simpledialog, filedialog, scrolledtext, font
+from tkinter import messagebox, simpledialog, filedialog, scrolledtext, ttk, font
 
 # Conectar ao banco de dados SQLite
 diretorio_atual = os.path.dirname(os.path.realpath(__file__))
@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS configuracoes (
 )
 ''')
 conexao.commit()
+# Criação da lista para melgor configuração de alerta do estoque baixo
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS alertas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    produto_id INTEGER NOT NULL,
+    valor INTEGER NOT NULL,
+    FOREIGN KEY (produto_id) REFERENCES produtos (id)
+)
+''')
+conexao.commit()
+
 # Função para centralizar a janela
 def centralizar_janela(janela):
     janela.update_idletasks() 
@@ -86,7 +97,7 @@ class Estoque:
             INSERT INTO movimentacoes (produto_id, tipo, quantidade, data_hora)
             VALUES (?, 'entrada', ?, ?)
         ''', (produto.id, quantidade, data_hora_atual))
-        self.conexao.commit()
+        self.conexao.commit()    
 
     def consultar_produto(self, query):
         self.cursor.execute('''
@@ -107,6 +118,7 @@ class Estoque:
             VALUES (?, 'saida', ?, ?)
         ''', (produto_id, quantidade_saida, data_hora_atual))
         self.conexao.commit()
+        
 
     def adicionar_ou_atualizar_produto(self, nome_produto, quantidade_nova, preco_venda, caminho_imagem):
     # Verifica se o produto já existe no banco de dados
@@ -126,6 +138,27 @@ class Estoque:
             self.registrar_movimentacao(produto_id, 'entrada', quantidade_nova)
         self.conexao.commit()
 
+    def atualizar_quantidade_produto(self, produto_id, quantidade_adicional):
+        try:
+            # Busca o produto pelo ID para obter a quantidade atual
+            self.cursor.execute("SELECT quantidade FROM produtos WHERE id = ?", (produto_id,))
+            resultado = self.cursor.fetchone()
+            if resultado:
+                quantidade_atual = resultado[0]
+                nova_quantidade = quantidade_atual + quantidade_adicional
+                # Atualiza a quantidade do produto no banco de dados
+                self.cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_quantidade, produto_id))
+                self.conexao.commit()
+                # Registra a movimentação de entrada
+                self.registrar_movimentacao(produto_id, 'entrada', quantidade_adicional)
+                return True
+            else:
+                print(f"Produto com ID {produto_id} não encontrado.")
+                return False
+        except Exception as e:
+            print(f"Erro ao atualizar o produto: {e}")
+            return False    
+
     def buscar_produtos_por_nome(self, nome_produto):
         self.cursor.execute("SELECT id, nome, quantidade FROM produtos WHERE nome LIKE ?", ('%' + nome_produto + '%',))
         return self.cursor.fetchall()
@@ -136,11 +169,38 @@ class Estoque:
         ''')
         return self.cursor.fetchall()
     
-    def buscar_nome_produto_por_id(self, produto_id):
-        self.cursor.execute("SELECT nome FROM produtos WHERE id = ?", (produto_id,))
+    def buscar_produto_por_id(self, produto_id):    
+        # Certifique-se de que produto_id é um inteiro
+        try:
+            produto_id_int = int(produto_id)
+        except ValueError:
+            return "ID de produto inválido"
+
+        self.cursor.execute("SELECT id, nome, quantidade, preco_venda, caminho_imagem FROM produtos WHERE id = ?", (produto_id_int,))
         resultado = self.cursor.fetchone()
-        return resultado[0] if resultado else "Nome não encontrado"
+        return resultado if resultado else "Produto não encontrado"
+
+
+    def buscar_nome_produto_por_id(self, produto_id):
+        # Certifique-se de que produto_id é um inteiro
+        try:
+            produto_id_int = int(produto_id)
+        except ValueError:
+            return "ID de produto inválido"
+
+        self.cursor.execute("SELECT nome FROM produtos WHERE id = ?", (produto_id_int,))
+        resultado = self.cursor.fetchone()
+        return resultado[0] if resultado else "Nome não encontrado" 
     
+    def buscar_id_produto_por_nome(self, nome_produto):
+        # Certifique-se de que nome_produto é uma string
+        if not isinstance(nome_produto, str):
+            return "Nome de produto inválido"
+
+        self.cursor.execute("SELECT id FROM produtos WHERE nome = ?", (nome_produto,))
+        resultado = self.cursor.fetchone()
+        return resultado[0] if resultado else "Produto não encontrado"
+
     def buscar_movimentacoes_recentes(self):
         self.cursor.execute("SELECT * FROM movimentacoes ORDER BY data_hora DESC")
         return self.cursor.fetchall()
@@ -153,26 +213,25 @@ class Estoque:
         ''', (produto_id, tipo, quantidade, data_hora_atual))
         self.conexao.commit()
 
-    def definir_limite_alerta(self, limite):
-        # Verifica se já existe um limite de alerta configurado
-        self.cursor.execute("SELECT valor FROM configuracoes WHERE chave = 'limite_alerta'")
+    def definir_limite_alerta(self, produto_id, limite):
+        # Verifica se já existe um limite de alerta configurado para o produto
+        self.cursor.execute("SELECT valor FROM alertas WHERE produto_id = ?", (produto_id,))
         resultado = self.cursor.fetchone()
         
         if resultado:
             # Se já existe, atualiza o valor
-            self.cursor.execute("UPDATE configuracoes SET valor = ? WHERE chave = 'limite_alerta'", (limite,))
+            self.cursor.execute("UPDATE alertas SET valor = ? WHERE produto_id = ?", (limite, produto_id))
         else:
             # Se não existe, insere um novo registro
-            self.cursor.execute("INSERT INTO configuracoes (chave, valor) VALUES ('limite_alerta', ?)", (limite,))
+            self.cursor.execute("INSERT INTO alertas (produto_id, valor) VALUES (?, ?)", (produto_id, limite))
         
-        self.conexao.commit() 
+        self.conexao.commit()
 
-    def buscar_limite_alerta(self):
-        # Implementa a lógica para buscar o limite de alerta no banco de dados
-        cursor = self.conexao.cursor()
-        cursor.execute("SELECT valor FROM configuracoes WHERE chave = 'limite_alerta'")
-        resultado = cursor.fetchone()
-        return resultado[0] if resultado else None 
+    def buscar_limite_alerta(self, produto_id):
+        # Implementa a lógica para buscar o limite de alerta do produto no banco de dados
+        self.cursor.execute("SELECT valor FROM alertas WHERE produto_id = ?", (produto_id,))
+        resultado = self.cursor.fetchone()
+        return resultado[0] if resultado else None  # Retorna None se não houver resultado
 
     def buscar_quantidade_atual_por_id(self, produto_id):
         # Implementa a lógica para buscar a quantidade atual do produto no banco de dados
@@ -189,11 +248,12 @@ class Estoque:
         self.conexao.commit()    
 
 class DialogoAdicionarProduto(tk.Toplevel):
-    def __init__(self, parent, estoque, app_parent):
+    def __init__(self, parent, estoque, app_parent, produto_id=None):
         super().__init__(parent)
         self.title("Adicionar Produto")
         self.estoque = estoque
         self.parent = app_parent
+        self.produto_id = produto_id
 
         self.nome = tk.StringVar()
         self.quantidade = tk.StringVar()
@@ -221,6 +281,18 @@ class DialogoAdicionarProduto(tk.Toplevel):
         botao_salvar.grid(row=4, column=1)
         botao_salvar.bind('<Return>', self.salvar_produto)
         botao_salvar.focus_set()
+
+        if produto_id is not None:
+            # Se um produto_id foi fornecido, preencha os campos com as informações do produto para atualização
+            produto = self.estoque.buscar_produto_por_id(produto_id)
+            if produto:
+                self.nome.set(produto[1])
+                self.quantidade.set(produto[2])
+                self.preco_venda.set(produto[3])
+                self.caminho_imagem.set(produto[4])
+            else:
+                messagebox.showerror("Erro", "Produto não encontrado.")
+                self.destroy()
        
     def selecionar_imagem(self):
         caminho_arquivo = filedialog.askopenfilename()
@@ -246,6 +318,64 @@ class DialogoAdicionarProduto(tk.Toplevel):
         except Exception as e:
             messagebox.showerror("Erro", f"Um erro inesperado ocorreu: {e}")
 
+    def configurar_atualizacao_produto(self, produto_id):
+        produto = self.estoque.buscar_produto_por_id(produto_id)
+        if produto:
+            tk.Label(self, text="ID do produto:").grid(row=0, column=0)
+            tk.Label(self, text=produto[0]).grid(row=0, column=1)
+
+            tk.Label(self, text="Nome do produto:").grid(row=1, column=0)
+            tk.Label(self, text=produto[1]).grid(row=1, column=1)
+
+            tk.Label(self, text="Quantidade atual:").grid(row=2, column=0)
+            tk.Label(self, text=produto[2]).grid(row=2, column=1)
+
+            tk.Label(self, text="Adicionar quantidade:").grid(row=3, column=0)
+            self.quantidade = tk.Entry(self)
+            self.quantidade.grid(row=3, column=1)
+            self.quantidade.focus_set()
+
+            botao_salvar = tk.Button(self, text="Salvar", command=lambda: self.salvar_atualizacao_produto(produto_id))
+            botao_salvar.grid(row=4, column=1)
+        else:
+            messagebox.showerror("Erro", "Produto não encontrado.")
+            self.destroy()
+
+    def salvar_atualizacao_produto(self, produto_id):
+        try:
+            quantidade_adicional = int(self.quantidade.get())
+            self.estoque.atualizar_quantidade_produto(produto_id, quantidade_adicional)
+            messagebox.showinfo("Sucesso", "Quantidade do produto atualizada com sucesso!")
+            self.app_parent.atualizar_area_atualizacoes()
+            self.destroy()
+        except ValueError:
+            messagebox.showerror("Erro", "Por favor, insira um número válido.")
+
+    def configurar_adicao_produto(self):
+        tk.Label(self, text="Nome do produto:").grid(row=0, column=0)
+        self.entrada_nome_produto = tk.Entry(self, textvariable=self.nome)
+        self.entrada_nome_produto.grid(row=0, column=1)
+
+        tk.Label(self, text="Quantidade do produto:").grid(row=1, column=0)
+        self.entrada_quantidade = tk.Entry(self, textvariable=self.quantidade)
+        self.entrada_quantidade.grid(row=1, column=1)
+
+        tk.Label(self, text="Preço de venda do produto (R$):").grid(row=2, column=0)
+        self.entrada_preco_venda = tk.Entry(self, textvariable=self.preco_venda)
+        self.entrada_preco_venda.grid(row=2, column=1)
+
+        tk.Label(self, text="Caminho da imagem do produto:").grid(row=3, column=0)
+        self.entrada_caminho_imagem = tk.Entry(self, textvariable=self.caminho_imagem)
+        self.entrada_caminho_imagem.grid(row=3, column=1)
+        tk.Button(self, text="Selecionar Imagem", command=self.selecionar_imagem).grid(row=3, column=2)
+
+        # Botão Salvar
+        botao_salvar = tk.Button(self, text="Salvar", command=self.salvar_produto)
+        botao_salvar.grid(row=4, column=1)
+        botao_salvar.bind('<Return>', lambda event: self.salvar_produto())
+
+        self.entrada_nome_produto.focus_set()
+        
     def limpar_campos(self):
         # Limpa os campos de entrada
         self.nome.set('')
@@ -276,16 +406,16 @@ class Aplicativo:
         self.master.grid_columnconfigure(0, weight=7, uniform="grupo")  # 70% para o conteúdo principal
         self.master.grid_columnconfigure(1, weight=3, uniform="grupo")  # 30% para a faixa lateral
 
-        # Cria um frame para o conteúdo principal com cor cinza claro
-        self.frame_principal = tk.Frame(master, bg='lightgrey')
+        # Cria um frame para o conteúdo principal, incluindo a tela de exibição do estoque
+        self.frame_principal = tk.Frame(master, bg='#f0f0f0')
         self.frame_principal.grid(row=0, column=0, sticky='nsew')
         
         # fonte para os botões
-        fonte_botao = font.Font(family='Helvetica', size=12, weight='bold')
+        fonte_botao = font.Font(family='Lucida Grande', size=12, weight='bold')
 
         # Botão para exibir/fechar atualizações do estoque
-        self.botao_atualizacoes = tk.Button(self.frame_principal, text="Exibir Atualizações do Estoque", bg='blue', fg='white', font=fonte_botao, command=self.toggle_atualizacoes_estoque, highlightthickness=4, bd=4)
-        self.botao_atualizacoes.grid(row=0, column=0, sticky='ew', padx=10, pady=10)
+        self.botao_atualizacoes = tk.Button(self.frame_principal, text="Exibir Atualizações do Estoque", bg='#005b4f', fg='white', font=fonte_botao, command=self.toggle_atualizacoes_estoque)
+        self.botao_atualizacoes.grid(row=0, column=0, sticky='ew', padx=10, pady=20, ipady=5)
         self.botao_atualizacoes.bind('<Return>', lambda event: self.toggle_atualizacoes_estoque())
         self.frame_principal.grid_rowconfigure(1, weight=1)
         self.frame_principal.grid_columnconfigure(0, weight=1)
@@ -293,8 +423,8 @@ class Aplicativo:
         self.texto_atualizacoes.grid(row=1, column=0, sticky='nsew', padx=10, pady=10)
         self.texto_atualizacoes.grid_remove()
         
-        # Cria um frame para a faixa lateral com cor azul escuro
-        self.frame_lateral = tk.Frame(master, bg='darkblue')
+        # Cria um frame para a faixa lateral 
+        self.frame_lateral = tk.Frame(master, bg='#E4E3E1')
         self.frame_lateral.grid(row=0, column=1, sticky='nsew')
         
         # Configura os botões para expandirem e preencherem o espaço disponível
@@ -302,69 +432,179 @@ class Aplicativo:
         self.frame_lateral.grid_rowconfigure(1, weight=0)
         self.frame_lateral.grid_rowconfigure(2, weight=0)
         self.frame_lateral.grid_rowconfigure(3, weight=0)
-        self.frame_lateral.grid_rowconfigure(4, weight=0) 
+        self.frame_lateral.grid_rowconfigure(4, weight=0)
+        self.frame_lateral.grid_rowconfigure(5, weight=0) 
         self.frame_lateral.grid_columnconfigure(0, weight=1)
-
-        # botão para adicionar Produto
-        self.botao_adicionar = tk.Button(self.frame_lateral, text="Adicionar Produto", bg='green', fg='white',font=fonte_botao, command=self.abrir_dialogo_adicionar)
-        self.botao_adicionar.grid(row=0, column=0, sticky='ew', padx=30, pady=20, ipady=10)
-        self.botao_adicionar.bind('<Return>', lambda event: self.abrir_dialogo_adicionar())
-
+        
         # botão para Pesquisar produto
-        self.botao_pesquisar = tk.Button(self.frame_lateral, text="Pesquisar Produto", bg='#f0f0f0', fg='black', font=fonte_botao, command=self.pesquisar_produto)
-        self.botao_pesquisar.grid(row=1, column=0, sticky='ew', padx=30, pady=10, ipady=10)
+        self.botao_pesquisar = tk.Button(self.frame_lateral, text="⬤   Pesquisar Produto   ⬤", bg='#005b4f', fg='white', font=fonte_botao, command=self.pesquisar_produto)
+        self.botao_pesquisar.grid(row=0, column=0, sticky='ew', padx=30, pady=20, ipady=5)
         self.botao_pesquisar.bind('<Return>', lambda event: self.pesquisar_produto())
         
-        # Botão para configurar alerta de estoque baixo
-        self.botao_configurar_alerta = tk.Button(self.frame_lateral, text="Alerta de Estoque Baixo", bg='yellow', fg='black', font=fonte_botao, command=self.configurar_alerta_estoque)
-        self.botao_configurar_alerta.grid(row=2, column=0, sticky='ew', padx=30, pady= (120,30), ipady=10)
-        self.botao_configurar_alerta.bind('<Return>', lambda event: self.configurar_alerta_estoque())
+        # botão para Registrar Entrada de Produto
+        self.botao_registrar_entrada = tk.Button(self.frame_lateral, text="⬤   Registrar Entrada   ⬤", bg='#005b4f', fg='white', font=fonte_botao, command=self.iniciar_atualizacao_estoque)
+        self.botao_registrar_entrada.grid(row=1, column=0, sticky='ew', padx=30, pady=10, ipady=5)
+        self.botao_registrar_entrada.bind('<Return>', lambda event: self.iniciar_atualizacao_estoque())
 
-        # Botão Apagar Produto
-        self.botao_apagar = tk.Button(self.frame_lateral, text="Apagar Produto", bg='#5b5b58', fg='white', font=fonte_botao, command=self.abrir_dialogo_apagar)
-        self.botao_apagar.grid(row=3, column=0, sticky='ew', padx=30, pady=0, ipady=10, ipadx=10)
-        self.botao_apagar.bind('<Return>', lambda event: self.abrir_dialogo_apagar())
-
-       # Adiciona o botão 'Registrar Saída' ao frame lateral
-        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="Registrar Saída", bg='red', fg='white', font=fonte_botao, command=self.abrir_dialogo_registrar_saida,highlightthickness=5, bd=5)
-        self.botao_registrar_saida.grid(row=4, column=0, sticky='ew', padx=30, pady=(120,30), ipady=12)
+        # Adiciona o botão Registrar Saída
+        self.botao_registrar_saida = tk.Button(self.frame_lateral, text="⬤    Registrar Saída    ⬤", bg='#005b4f', fg='white', font=fonte_botao, command=self.abrir_dialogo_registrar_saida)
+        self.botao_registrar_saida.grid(row=2, column=0, sticky='ew', padx=30, pady=20, ipady=5)
         self.botao_registrar_saida.bind('<Return>', lambda event: self.abrir_dialogo_registrar_saida())
      
+        # botão para adicionar Produto
+        self.botao_adicionar = tk.Button(self.frame_lateral, text="▢   Adicionar Produto   ▢", bg='#005b4f', fg='white',font=fonte_botao, command=self.abrir_dialogo_adicionar)
+        self.botao_adicionar.grid(row=3, column=0, sticky='ew', padx=30, pady=(150,30), ipady=5)
+        self.botao_adicionar.bind('<Return>', lambda event: self.abrir_dialogo_adicionar())
+
+        # Botão Apagar Produto
+        self.botao_apagar = tk.Button(self.frame_lateral, text="▢     Apagar Produto     ▢", bg='#005b4f', fg='white', font=fonte_botao, command=self.abrir_dialogo_apagar)
+        self.botao_apagar.grid(row=4, column=0, sticky='ew', padx=30, pady=(0), ipady=5, ipadx=5)
+        self.botao_apagar.bind('<Return>', lambda event: self.abrir_dialogo_apagar())
+
+        # Botão para configurar alerta de estoque baixo
+        self.botao_configurar_alerta = tk.Button(self.frame_lateral, text="➡  Alerta de Estoque Baixo", bg='#005b4f', fg='white', font=fonte_botao, command=self.configurar_alerta_produto)
+        self.botao_configurar_alerta.grid(row=5, column=0, sticky='ew', padx=30, pady= 30, ipady=5)
+        self.botao_configurar_alerta.bind('<Return>', lambda event: self.configurar_alerta_produto())
+        
     def abrir_dialogo_adicionar(self):
         dialogo = DialogoAdicionarProduto(self.master, self.estoque, self)
         centralizar_janela(dialogo)  # Chama a função para centralizar e ajustar o tamanho
+
+    def iniciar_atualizacao_estoque(self):
+        query = simpledialog.askstring("Registrar Entrada de Produto", "Digite o nome ou ID do produto:")
+        if query is None:
+            return
+        produto_encontrado = None
+        if query:
+            # Verifica se a consulta é um número (ID)
+            if query.isdigit():
+                produto_id = int(query)
+                produto_encontrado = self.estoque.buscar_produto_por_id(produto_id)
+                if produto_encontrado:
+                    self.mostrar_janela_selecao_para_atualizar([produto_encontrado])
+                else:
+                    messagebox.showinfo("Informação", "Nenhum produto encontrado.")
+            else:
+                # Assume que a consulta é um nome
+                produtos_encontrados = self.estoque.buscar_produtos_por_nome(query)
+                if len(produtos_encontrados) == 1:
+                    produto_encontrado = produtos_encontrados[0]
+                    self.mostrar_janela_selecao_para_atualizar([produto_encontrado])
+                elif len(produtos_encontrados) > 1:
+                    self.mostrar_janela_selecao_para_atualizar(produtos_encontrados, query)
+                    return
         
-    def salvar_limite_alerta(self, valor, janela_alerta):
-        try:
-            valor_int = int(valor) 
-            # Implementa a lógica para salvar o valor no banco de dados
-            self.estoque.definir_limite_alerta(valor_int)
-            messagebox.showinfo("Sucesso", "Alerta de estoque baixo configurado para: " + str(valor_int), parent=janela_alerta)
-            janela_alerta.destroy()
-        except ValueError:
-            messagebox.showerror("Erro", "Por favor, insira um número válido.", parent=janela_alerta)    
+    def mostrar_janela_selecao_para_atualizar(self, produtos, query=None):
+        janela_selecao = tk.Toplevel(self.master)
+        janela_selecao.title("Selecionar Produto para Atualizar")
+        janela_selecao.geometry('800x600')
+        minha_fonte = font.Font(family='Helvetica', size=16, weight='bold')
 
-    def configurar_alerta_estoque(self):
-    # Cria uma janela de diálogo para inserir a quantidade mínima de estoque
-        janela_alerta = tk.Toplevel(self.master)
-        janela_alerta.title("Configurar Alerta de Estoque Baixo")
-        janela_alerta.geometry('220x140')
-        centralizar_janela(janela_alerta)
-        janela_alerta.grab_set()  # Torna a janela modal em relação à janela pai
-        janela_alerta.bind('<Escape>', lambda event: janela_alerta.destroy())
-        janela_alerta.focus_set()
+        janela_selecao.grid_rowconfigure(0, weight=1)
+        janela_selecao.grid_columnconfigure(0, weight=1)
 
-        tk.Label(janela_alerta, text="Defina a quantidade mínima de estoque:").grid(row=0, column=0, columnspan=2, pady=10)
+        lista_produtos = tk.Listbox(janela_selecao, font=minha_fonte)
+        lista_produtos.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        if isinstance(produtos, list):
+            for produto in produtos:
+                lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
+        else:
+            lista_produtos.insert(tk.END, f"ID: {produtos[0]} - Nome: {produtos[1]} - Quantidade: {produtos[2]}")
+       
+        # Botão para confirmar a seleção e abrir a janela de atualização de estoque
+        botao_confirmar = tk.Button(janela_selecao, text="Confirmar", command=lambda: self.abrir_dialogo_atualizar_estoque(lista_produtos, janela_selecao))
+        botao_confirmar.grid(row=1, column=0, pady=5)
+        
+        lista_produtos.bind('<Return>', lambda event: self.abrir_dialogo_atualizar_estoque(lista_produtos, janela_selecao))
+        janela_selecao.bind('<Escape>', lambda event: janela_selecao.destroy())
+        lista_produtos.focus_set()
 
-    # Cria um Spinbox para selecionar a quantidade
-        spinbox_valor = tk.Spinbox(janela_alerta, from_=0, to=1000, increment=1, wrap=True)
-        spinbox_valor.grid(row=1, column=0, columnspan=2, pady=10)
+    def abrir_dialogo_atualizar_estoque(self, lista_produtos, janela_selecao):
+        selecionado = lista_produtos.curselection()
+        if selecionado:
+            produto_id = lista_produtos.get(selecionado).split(" - ")[0].replace("ID: ", "")
+            produto = self.estoque.buscar_produto_por_id(produto_id)
+            if produto:
+                self.abrir_janela_atualizacao_quantidade(produto)
+                janela_selecao.destroy()
+            else:
+                messagebox.showinfo("Informação", "Produto não encontrado.", parent=janela_selecao)
+        else:
+            messagebox.showinfo("Informação", "Por favor, selecione um produto para atualizar.", parent=janela_selecao)
 
-    # Botão para salvar a configuração
-        botao_salvar = tk.Button(janela_alerta, text="Salvar", command=lambda: self.salvar_limite_alerta(spinbox_valor.get(), janela_alerta))
+
+    def abrir_janela_atualizacao_quantidade(self, produto):
+        dialogo_atualizar = tk.Toplevel(self.master)
+        dialogo_atualizar.title("Atualizar Quantidade do Produto")
+        dialogo_atualizar.geometry('300x200')
+
+        tk.Label(dialogo_atualizar, text="ID do produto:").grid(row=0, column=0)
+        tk.Label(dialogo_atualizar, text=produto[0]).grid(row=0, column=1)
+
+        tk.Label(dialogo_atualizar, text="Nome do produto:").grid(row=1, column=0)
+        tk.Label(dialogo_atualizar, text=produto[1]).grid(row=1, column=1)
+
+        tk.Label(dialogo_atualizar, text="Quantidade atual:").grid(row=2, column=0)
+        tk.Label(dialogo_atualizar, text=produto[2]).grid(row=2, column=1)
+
+        tk.Label(dialogo_atualizar, text="Adicionar quantidade:").grid(row=3, column=0)
+        quantidade_entrada = tk.Entry(dialogo_atualizar)
+        quantidade_entrada.grid(row=3, column=1)
+        quantidade_entrada.focus_set()
+        centralizar_janela(dialogo_atualizar)
+
+        def confirmar_atualizacao(event=None):
+            nonlocal quantidade_entrada, dialogo_atualizar, produto
+            try:
+                quantidade_adicional = int(quantidade_entrada.get())
+                self.estoque.atualizar_quantidade_produto(produto[0], quantidade_adicional)
+                messagebox.showinfo("Sucesso", "Quantidade do produto atualizada com sucesso!", parent=dialogo_atualizar)
+                dialogo_atualizar.destroy()
+                # Atualize a área de atualizações
+                self.atualizar_area_atualizacoes()
+            except ValueError:
+                messagebox.showerror("Erro", "Por favor, insira um número válido.", parent=dialogo_atualizar)
+        # Botão para confirmar a atualização
+        tk.Button(dialogo_atualizar, text="Confirmar", command=confirmar_atualizacao).grid(row=4, column=1)
+        dialogo_atualizar.bind('<Return>', confirmar_atualizacao)
+
+    def configurar_alerta_produto(self):
+        janela_alerta_produto = tk.Toplevel(self.master)
+        janela_alerta_produto.title("Configurar Alerta de Estoque por Produto")
+        janela_alerta_produto.geometry('350x150')
+        centralizar_janela(janela_alerta_produto)
+        janela_alerta_produto.grab_set()
+        janela_alerta_produto.bind('<Escape>', lambda event: janela_alerta_produto.destroy())
+        janela_alerta_produto.focus_set()
+
+        tk.Label(janela_alerta_produto, text="Selecione o produto:").grid(row=0, column=0, pady=10)
+        tk.Label(janela_alerta_produto, text="Defina a quantidade mínima:").grid(row=1, column=0, pady=10)
+
+        lista_produtos = self.estoque.buscar_todos_os_produtos()
+        nomes_produtos = [produto[1] for produto in lista_produtos]  # Cria uma lista apenas com os nomes dos produtos
+
+        combo_produto = ttk.Combobox(janela_alerta_produto, values=nomes_produtos)
+        combo_produto.grid(row=0, column=1, pady=10)
+        combo_produto.current(0)  # Define o valor padrão como o primeiro produto da lista
+
+        spinbox_valor = tk.Spinbox(janela_alerta_produto, from_=0, to=1000, increment=1, wrap=True)
+        spinbox_valor.grid(row=1, column=1, pady=10)
+
+        botao_salvar = tk.Button(janela_alerta_produto, text="Salvar", command=lambda: self.salvar_limite_alerta(combo_produto.get(), spinbox_valor.get(), janela_alerta_produto))
         botao_salvar.grid(row=2, column=0, columnspan=2, pady=10)
-        botao_salvar.bind('<Return>', lambda event: self.salvar_limite_alerta(spinbox_valor.get(), janela_alerta))
 
+
+    def salvar_limite_alerta(self, nome_produto, valor, janela_alerta_produto):
+        try:
+            produto_id = self.estoque.buscar_id_produto_por_nome(nome_produto)
+            valor_int = int(valor)
+            self.estoque.definir_limite_alerta(produto_id, valor_int)
+            messagebox.showinfo("Sucesso", f"Alerta de estoque baixo configurado para o produto {nome_produto} com o valor: {valor_int}", parent=janela_alerta_produto)
+            janela_alerta_produto.destroy()
+            self.exibir_atualizacoes_estoque()
+        except ValueError:
+            messagebox.showerror("Erro", "Por favor, insira um número válido.", parent=janela_alerta_produto)
+        
     def pesquisar_produto(self):
         query = simpledialog.askstring("Pesquisar produto", "Digite o nome ou ID do produto:")
         if query is not None and query.strip():
@@ -415,16 +655,15 @@ class Aplicativo:
         self.texto_atualizacoes.tag_config('alerta', foreground='red', background='yellow') 
         
         # Busca o limite de alerta de estoque baixo do banco de dados
-        limite_alerta = self.estoque.buscar_limite_alerta()
         todos_os_produtos = self.estoque.buscar_todos_os_produtos()
         alertas_estoque_baixo = []
 
         # Verifica todos os produtos para identificar alertas de estoque baixo
         for produto in todos_os_produtos:
             produto_id, nome_produto, quantidade_atual = produto
-            if quantidade_atual <= limite_alerta:
+            limite_alerta = self.estoque.buscar_limite_alerta(produto_id)
+            if limite_alerta is not None and quantidade_atual <= limite_alerta:
                 alertas_estoque_baixo.append(f"Alerta de Estoque Baixo: {nome_produto}, Quantidade Atual: {quantidade_atual}\n")
-
         # Insere os alertas de estoque baixo no topo da área de texto
         for alerta in alertas_estoque_baixo:
             self.texto_atualizacoes.insert('1.0', alerta, 'alerta')
@@ -444,8 +683,7 @@ class Aplicativo:
 
     def atualizar_area_atualizacoes(self):
         # Verifica se a área de atualizações está visível antes de atualizar
-        if self.texto_atualizacoes.winfo_ismapped():
-            self.exibir_atualizacoes_estoque()
+        self.exibir_atualizacoes_estoque()
 
     def toggle_atualizacoes_estoque(self):
         if self.texto_atualizacoes.winfo_ismapped():
@@ -455,8 +693,8 @@ class Aplicativo:
             self.texto_atualizacoes.grid()
             self.botao_atualizacoes.config(text="Fechar Atualizações do Estoque")
             # atualiza o texto com as últimas atualizações do estoque
-            self.exibir_atualizacoes_estoque()
-    
+            self.atualizar_area_atualizacoes()
+            
     def mostrar_janela_selecao_para_apagar(self, produtos, nome_produto):
         janela_selecao = tk.Toplevel(self.master)
         janela_selecao.title("Selecionar Produto para Apagar")
@@ -481,17 +719,25 @@ class Aplicativo:
         self.lista_produtos.focus_set()
 
     def abrir_dialogo_apagar(self):
-        nome_produto = simpledialog.askstring("Apagar Produto", "Digite o nome do produto a ser apagado:")
-        if nome_produto is None:
+        query = simpledialog.askstring("Apagar Produto", "Digite o nome ou ID do produto a ser apagado:")
+        if query is None:
             return
         produtos_encontrados = []
-        if nome_produto:
-            produtos_encontrados = self.estoque.buscar_produtos_por_nome(nome_produto)
+        if query:
+            # Verifica se a consulta é um número (ID)
+            if query.isdigit():
+                produto_id = int(query)
+                produto = self.estoque.buscar_produto_por_id(produto_id)
+                if produto != "Produto não encontrado":
+                    produtos_encontrados = [produto]
+            else:
+                # Assume que a consulta é um nome
+                produtos_encontrados = self.estoque.buscar_produtos_por_nome(query)
         if produtos_encontrados:
-            self.mostrar_janela_selecao_para_apagar(produtos_encontrados, nome_produto)
+            self.mostrar_janela_selecao_para_apagar(produtos_encontrados, query)
         else:
-            messagebox.showinfo("Informação", "Nenhum produto encontrado com esse nome.")
-    
+            messagebox.showinfo("Informação", "Nenhum produto encontrado.")
+
     def exibir_lista_produtos(self, nome_produto):
         produtos_encontrados = self.estoque.buscar_produtos_por_nome(nome_produto)
         if produtos_encontrados:
@@ -552,25 +798,39 @@ class DialogoRegistrarSaida(tk.Toplevel):
         self.parent = app_parent
         self.title("Registrar Saída de Produto")
         self.bind('<Escape>', lambda event: self.destroy())
-        self.geometry('300x100') 
+        self.geometry('350x150') 
         centralizar_janela(self)
 
-        tk.Label(self, text="Nome do produto:").grid(row=0, column=0)
+        tk.Label(self, text="Digite o Nome ou ID do produto:").grid(row=0, column=0)
         self.entrada_nome_produto = tk.Entry(self)
         self.entrada_nome_produto.grid(row=0, column=1)
         self.entrada_nome_produto.focus_set()
         self.entrada_nome_produto.bind('<Return>', lambda event: self.buscar_produto())
         tk.Button(self, text="Buscar", command=self.buscar_produto).grid(row=0, column=2)
     
+    
     def buscar_produto(self):
-        nome_produto = self.entrada_nome_produto.get()
-        produtos_encontrados = self.estoque.buscar_produtos_por_nome(nome_produto)
-        if produtos_encontrados:
-            self.mostrar_produtos_encontrados(produtos_encontrados)
-        else:
-            messagebox.showinfo("Informação", "Nenhum produto encontrado.")
-
-
+        query = self.entrada_nome_produto.get()
+        if query is not None and query.strip():
+            # Verifica se a consulta é um número (ID)
+            if query.isdigit():
+                produto_id = int(query)
+                produto = self.estoque.buscar_produto_por_id(produto_id)
+                if produto != "Nome não encontrado":
+                    produtos_encontrados = [produto]
+                    self.mostrar_produtos_encontrados(produtos_encontrados)
+                else:
+                    messagebox.showinfo("Informação", "Nenhum produto encontrado.")
+            else:
+                # Assume que a consulta é um nome
+                produtos_encontrados = self.estoque.buscar_produtos_por_nome(query)
+                if produtos_encontrados:
+                    self.mostrar_produtos_encontrados(produtos_encontrados)
+                else:
+                    messagebox.showinfo("Informação", "Nenhum produto encontrado.")
+        elif query is None:
+            pass  # Não faz nada se a caixa de diálogo for fechada sem entrada
+    
     def mostrar_produtos_encontrados(self, produtos):
         # Cria uma nova janela para mostrar os produtos encontrados
         janela_selecao = tk.Toplevel(self)
@@ -586,7 +846,6 @@ class DialogoRegistrarSaida(tk.Toplevel):
 
         for produto in produtos:
             lista_produtos.insert(tk.END, f"ID: {produto[0]} - Nome: {produto[1]} - Quantidade: {produto[2]}")
-
         tk.Button(janela_selecao, text="Selecionar", command=lambda: self.selecionar_produto(lista_produtos, janela_selecao)).pack()
 
     def selecionar_produto(self, lista_produtos, janela_selecao):
@@ -595,7 +854,7 @@ class DialogoRegistrarSaida(tk.Toplevel):
             produto_id = lista_produtos.get(selecionado).split(" - ")[0].replace("ID: ", "")
             self.abrir_dialogo_quantidade_saida(produto_id, janela_selecao)
         else:
-            messagebox.showinfo("Informação", "Por favor, selecione um produto.")
+            messagebox.showinfo("Informação", "Por favor, selecione um produto.") 
 
     def abrir_dialogo_quantidade_saida(self, produto_id, janela_selecao):
         # Cria uma janela de diálogo para inserir a quantidade de saída
@@ -623,8 +882,6 @@ class DialogoRegistrarSaida(tk.Toplevel):
         # Se a conversão falhar, mostra uma mensagem de erro e retorna
         messagebox.showerror("Erro", "Por favor, insira um número válido.", parent=janela_saida)
         return
-
-      print(f"Confirmando saída: Produto ID {produto_id}, Quantidade {quantidade_saida}")  # Para depuração
 
       if quantidade_saida > 0:
           try:
