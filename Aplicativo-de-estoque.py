@@ -4,6 +4,72 @@ import datetime
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog, scrolledtext, ttk, font
 
+def tela_boas_vindas():
+    janela = tk.Tk()
+    janela.title("Boas-vindas")
+    janela.geometry("700x400")
+    cor_fundo = 'white'
+    janela['bg'] = cor_fundo
+    janela.resizable(False, False)
+
+    # Centraliza a janela na tela
+    janela.update_idletasks()
+    largura = janela.winfo_width()
+    altura = janela.winfo_height()
+    x = (janela.winfo_screenwidth() // 2) - (largura // 2)
+    y = (janela.winfo_screenheight() // 2) - (altura // 2)
+    janela.geometry(f"+{x}+{y}")
+
+    def fechar_janela(event=None):
+        janela.destroy()
+
+    # Configura a grade da janela para que os widgets expandam
+    janela.grid_rowconfigure(0, weight=1)
+    janela.grid_columnconfigure(0, weight=1)
+    janela.grid_rowconfigure(1, weight=0)
+    janela.grid_rowconfigure(2, weight=0)
+
+    # Define a fonte que você já tem no seu código
+    minha_fonte = font.Font(family="Helvetica", size=12, weight="bold")
+
+    # Cria o widget Text para a mensagem de boas-vindas
+    texto_boas_vindas = tk.Text(janela, bg=cor_fundo, font=minha_fonte, wrap=tk.WORD, padx=20, pady=20)
+    texto_boas_vindas.grid(row=0, column=0, sticky="nsew")
+
+    # Insere a mensagem de boas-vindas no widget Text
+    mensagem_principal = ("Bem-vindo ao Gerenciador de Estoque\n"
+                          "Desenvolvido por Paulo Ricardo\n\n"
+                          "Olá, me chamo Paulo Ricardo, sou estudante de Analise e Desenvolvimento de Sistemas pela universidade Unicarioca, "
+                          "fiz esse projeto para ajudar pequenos e médios comerciantes local de meu Bairro. "
+                          "Esse projeto é de caráter sem fim lucrativo, porém se você gostar e desejar implementar outras funcionalidades, "
+                          "estou a disposição para atualizá-lo para suprir com as suas necessidades, pode entrar em contato por email ou telefone.")
+    texto_boas_vindas.insert(tk.END, mensagem_principal)
+    texto_boas_vindas.tag_configure('center', justify='center')
+    texto_boas_vindas.tag_add('center', 1.0, "end")
+    texto_boas_vindas.config(state=tk.DISABLED)  # Desativa a edição do texto
+    
+    instrucao = "Clique Enter no teclado ou no botão Fechar para começar"
+    label_instrucao = tk.Label(janela, text=instrucao, bg=cor_fundo, font=("Helvetica", 10), borderwidth=1, relief="solid")
+    label_instrucao.grid(row=1, column=0, pady=(5, 0), sticky="ew")
+
+    # Adiciona rótulos para o e-mail e telefone
+    email_telefone = ("Email: pr.pauloricardo@live.com\n"
+                      "Telefone: (21) 960114278")
+    label_contato = tk.Label(janela, text=email_telefone, justify=tk.LEFT, font=minha_fonte, bg=cor_fundo)
+    label_contato.grid(row=2, column=0, sticky="w", padx=20, pady=(50, 0))
+
+    # Adiciona um botão para fechar a janela de boas-vindas
+    botao_fechar = tk.Button(janela, text="Fechar", command=fechar_janela, bg='#005b4f')
+    botao_fechar.grid(row=3, column=0, pady=10, sticky="ew")
+
+    # Vincula a tecla Enter do teclado ao botão "Fechar"
+    janela.bind('<Return>', lambda event: fechar_janela(janela))
+
+    janela.mainloop()
+
+tela_boas_vindas()
+
+
 # Conectar ao banco de dados SQLite
 diretorio_atual = os.path.dirname(os.path.realpath(__file__))
 caminho_banco_de_dados = os.path.join(diretorio_atual, 'estoque_local.db')
