@@ -1,5 +1,7 @@
+import sys
 import os
 import sqlite3
+from pathlib import Path
 import datetime
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog, scrolledtext, ttk, font
@@ -64,16 +66,25 @@ def tela_boas_vindas():
 
     # Vincula a tecla Enter do teclado ao botão "Fechar"
     janela.bind('<Return>', lambda event: fechar_janela(janela))
-
     janela.mainloop()
 
 tela_boas_vindas()
 
+# Conectar ao banco de dados SQLite
+if getattr(sys, 'frozen', False):
+    # Se o aplicativo está congelado com PyInstaller, o caminho é o diretório do executável
+    diretorio_atual = sys._MEIPASS
+else:
+    # Caso contrário, é o diretório do script
+    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+
+# Definir o caminho do banco de dados dentro da pasta AppData
+appdata_path = Path.home() / 'AppData' / 'Local' / 'GerenciadorDeEstoque'
+appdata_path.mkdir(parents=True, exist_ok=True)
+caminho_banco_de_dados = appdata_path / 'estoque_local.db'
 
 # Conectar ao banco de dados SQLite
-diretorio_atual = os.path.dirname(os.path.realpath(__file__))
-caminho_banco_de_dados = os.path.join(diretorio_atual, 'estoque_local.db')
-conexao = sqlite3.connect(caminho_banco_de_dados)
+conexao = sqlite3.connect(str(caminho_banco_de_dados))
 cursor = conexao.cursor()
 
 # Criar a tabela de produtos, se ela não existir
