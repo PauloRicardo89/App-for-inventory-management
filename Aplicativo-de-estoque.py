@@ -54,7 +54,7 @@ def tela_boas_vindas():
     label_instrucao = tk.Label(janela, text=instrucao, bg=cor_fundo, font=("Helvetica", 10), borderwidth=1, relief="solid")
     label_instrucao.grid(row=1, column=0, pady=(5, 0), sticky="ew")
 
-    # Adiciona rótulos para o e-mail e telefone
+    # Adiciona rótulos para o email e telefone
     email_telefone = ("Email: pr.pauloricardo@live.com\n"
                       "Telefone: (21) 960114278")
     label_contato = tk.Label(janela, text=email_telefone, justify=tk.LEFT, font=minha_fonte, bg=cor_fundo)
@@ -78,7 +78,7 @@ else:
     # Caso contrário, é o diretório do script
     diretorio_atual = os.path.dirname(os.path.abspath(__file__))
 
-# Definir o caminho do banco de dados dentro da pasta AppData
+# Defini o caminho do banco de dados dentro da pasta AppData
 appdata_path = Path.home() / 'AppData' / 'Local' / 'GerenciadorDeEstoque'
 appdata_path.mkdir(parents=True, exist_ok=True)
 caminho_banco_de_dados = appdata_path / 'estoque_local.db'
