@@ -5,6 +5,7 @@ from pathlib import Path
 import datetime
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog, scrolledtext, ttk, font
+from PIL import Image, ImageTk
 
 def tela_boas_vindas():
     janela = tk.Tk()
@@ -370,9 +371,14 @@ class DialogoAdicionarProduto(tk.Toplevel):
             else:
                 messagebox.showerror("Erro", "Produto não encontrado.")
                 self.destroy()
-       
+        self.grab_set()  # Mantém o foco na janela de diálogo
+        
     def selecionar_imagem(self):
-        caminho_arquivo = filedialog.askopenfilename()
+        self.update()  # Atualiza a janela principal antes de abrir o explorador de arquivos
+        caminho_arquivo = filedialog.askopenfilename(
+            title="Selecione a imagem do produto",
+            filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.gif;*.webp")]
+    )
         if caminho_arquivo:
             self.caminho_imagem.set(caminho_arquivo)
 
@@ -709,14 +715,33 @@ class Aplicativo:
         janela_resultados.title("Resultados da Pesquisa")
         janela_resultados.bind('<Escape>', lambda event: janela_resultados.destroy())     
         janela_resultados.focus_set()
-        
+    
         texto_resultados = scrolledtext.ScrolledText(janela_resultados, wrap=tk.WORD, font=('Arial', 16))
         texto_resultados.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-        
+    
         for id, nome, quantidade, preco_venda, caminho_imagem in produtos:
             preco_formatado = formatar_valor_para_exibicao(preco_venda)
-            texto_resultados.insert(tk.END, f"ID: {id}\nNome: {nome}\nQuantidade: {quantidade}\nPreço de Venda: {preco_formatado}\nImagem: {caminho_imagem}\n\n")
         
+            # Cria um frame para agrupar os dados e a imagem
+            frame_produto = tk.Frame(texto_resultados)
+            frame_produto.pack(fill=tk.X, padx=10, pady=5)
+        
+            # Adiciona os dados do produto no frame
+            dados_produto = f"ID: {id}\nNome: {nome}\nQuantidade: {quantidade}\nPreço de Venda: {preco_formatado}"
+            label_dados = tk.Label(frame_produto, text=dados_produto, font=('Arial', 16), justify=tk.LEFT)
+            label_dados.pack(side=tk.LEFT, padx=5)
+        
+            if caminho_imagem:
+                try:
+                    imagem = Image.open(caminho_imagem)
+                    imagem.thumbnail((100, 100))  # Redimensiona a imagem para caber na janela
+                    imagem_tk = ImageTk.PhotoImage(imagem)
+                    label_imagem = tk.Label(frame_produto, image=imagem_tk)
+                    label_imagem.image = imagem_tk  # Salva uma referência para evitar que a imagem seja coletada pelo garbage collector
+                    label_imagem.pack(side=tk.LEFT, padx=5)
+                except Exception as e:
+                    texto_resultados.insert(tk.END, f"Erro ao carregar a imagem: {e}\n")
+            texto_resultados.insert(tk.END, "\n")
         texto_resultados.config(state=tk.DISABLED)  # Desativa a edição do texto
 
     def abrir_dialogo_registrar_saida(self):
