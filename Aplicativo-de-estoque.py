@@ -1,3 +1,6 @@
+# Copyright (c) 2023, Paulo Ricardo de Souza Feitosa
+# Licensed under the MIT License.
+
 import sys
 import os
 import sqlite3
